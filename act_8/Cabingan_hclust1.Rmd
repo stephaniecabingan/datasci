@@ -1,0 +1,143 @@
+---
+title: "Cabingan_hclust"
+author: "Stephanie Cabingan"
+date: "2026-06-10"
+output: html_document
+---
+
+A. 
+```{r}
+# install.packages("cluster")
+library(cluster)
+```
+
+Read Data
+```{r}
+df <- read.csv("morphology_data.csv")
+```
+
+Exclude sex and population column
+```{r}
+clmph_data <- df[,3:19]
+clmph_data
+```
+
+Cleaning
+```{r}
+good <- complete.cases(clmph_data)
+head(clmph_data[good, ])
+morpho_data <- clmph_data[good,]
+```
+
+Standardization
+```{r}
+morpho_scaled <- scale(morpho_data)
+```
+
+Euclidean Distance
+```{r}
+d <- dist(morpho_scaled, method = "euclidean")
+```
+
+Single Linkage
+```{r, fig.width = 20, fig.height = 6}
+mp_single <- hclust(d, method = "single")
+rownames(morpho_scaled) <- df$Pop
+
+plot(mp_single,
+     main = "Single Linkage",
+     labels = rownames(morpho_scaled),
+     cex = 0.7)
+```
+
+Ward's Linkage
+```{r, fig.width = 20, fig.height = 6}
+mp_ward <- hclust(d, method = "ward.D2")
+
+plot(mp_ward,
+     main = "Ward D2",
+     labels = rownames(morpho_scaled),
+     cex = 0.7)
+```
+
+Single Linkage Loop
+```{r, fig.width = 8, fig.height = 6}
+mpsingle_loop <- numeric(10)
+
+for(k in 2:10){
+  mp_clusters <- cutree(mp_single, k)
+  mp_sil <- silhouette(mp_clusters, d)
+  mpsingle_loop[k] <- mean(mp_sil[, 3])
+}
+
+plot(
+    mpsingle_loop,
+    type = "b",
+    xlab = "Cluster No.",
+    ylab = "Silhouette Width",
+    main = "Silhouette Scores for Single Linkage Method"
+)
+```
+
+Ward Linkage Loop
+```{r, fig.width = 8, fig.height = 6}
+mpw_loop <- numeric(10)
+
+for(k in 2:10){
+  mpw_clusters <- cutree(mp_ward, k)
+  mpw_sil <- silhouette(mpw_clusters, d)
+  mpw_loop[k] <- mean(mpw_sil[, 3])
+}
+
+plot(
+  mpw_loop,
+  type = "b",
+  xlab = "Cluster No.",
+  ylab = "Silhouette Width",
+  main = "Silhouette Scores for Ward Method"
+)
+```
+
+Single Linkage Loop Dendrogram
+```{r, fig.width = 20, fig.height = 6}
+opk_single <- which.max(mpsingle_loop) + 1
+rownames(morpho_scaled) <- df$Pop
+
+plot(
+  mp_single,
+  main = "Single Linkage Loop with K = 2",
+  labels = rownames(morpho_scaled),
+  cex = 0.7
+)
+
+rect.hclust(
+  mp_single,
+  k = opk_single,
+  border = c("lightblue", "pink")
+)
+```
+
+Ward Linkage Loop Dendrogram
+```{r, fig.width = 20, fig.height = 6}
+opk_ward <- which.max(mpw_loop) + 1
+rownames(morpho_scaled) <- df$Pop
+
+plot(
+  mp_ward,
+  main = "Ward Linkage Loop with K = 2",
+  labels = rownames(morpho_scaled),
+  cex = 0.7
+)
+
+rect.hclust(
+  mp_ward,
+  k = opk_ward,
+  border = c("green", "yellow")
+)
+```
+
+B.
+
+1. For Activity 7, k was determined through the elbow curve and had a value of 3, but this time it was determined through the silhouette plot and results in a value of 2.
+
+2. No the clusters were not consistent. I think because all the different functions do different things so it's important to maybe go through all the methods to make sure. 
