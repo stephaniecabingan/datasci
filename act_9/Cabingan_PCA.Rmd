@@ -1,0 +1,162 @@
+---
+title: "Cabingan_hclust"
+author: "Stephanie Cabingan"
+date: "2026-06-17"
+output: html_document
+---
+
+Read packages
+```{r}
+library(PCAtest)
+library(rmarkdown)
+library(knitr)
+```
+
+A. 
+
+Read data
+```{r}
+df <- read.csv("Meneses_et.al_2026_Platymantis.csv")
+
+```
+
+Subset Species and Morphological Data
+```{r}
+species_data <- df[,-c(2:9)]
+kable(species_data)
+```
+
+Data Structure and Class
+```{r}
+class(species_data)
+str(species_data)
+```
+
+Cleaning data
+```{r}
+good <- complete.cases(species_data)
+head(species_data[good, ])
+spmo_data <- species_data[good,]
+```
+
+Scaling data
+```{r}
+numeric_data <- sapply(spmo_data, is.numeric)
+spmo_scaled <- scale(spmo_data[,numeric_data])
+kable(spmo_scaled)
+```
+
+Pairwise correlation
+```{r}
+spmo_corr <- cor(spmo_scaled)
+kable(round(spmo_corr, 2))
+```
+
+Eigenvalues
+```{r}
+eig <- eigen(spmo_corr)
+eig
+```
+
+Proportion of variance
+```{r}
+spmo_var <- eig$values / sum(eig$values)
+kable(spmo_var)
+```
+
+Eigenvalues to percentages of total variance
+```{r}
+spmo_pervar <- (eig$values / sum(eig$values)) * 100
+```
+
+Comptute PC scores
+```{r}
+eig_vec <- eig$vectors
+scores <- spmo_scaled %*% eig_vec
+kable(head(scores))
+```
+
+Plot
+```{r}
+spmo_pca <- prcomp(spmo_scaled)
+species <- as.factor(spmo_data$Species)
+colors <- c("black", "pink3")
+
+par(mfrow = c(1,2))
+
+plot(
+  spmo_pca,
+  type = "barplot",
+  main = "Scree Plot"
+)
+
+plot(
+  spmo_pca$x[,1],
+  spmo_pca$x[,2],
+  col = colors,
+  pch = c(19,17),
+  cex = 0.6,
+  xlab = "PC1",
+  ylab = "PC2",
+  main = "PCA Biplot"
+)
+
+legend("topright",
+       legend = c("PC1", "PC2"),
+       pch = c(19, 17),
+       col = colors
+)
+
+```
+
+B.
+
+PCATest package
+```{r}
+pcatest <- PCAtest(spmo_scaled, 100, 100, 0.05, varcorr = FALSE, counter = FALSE, plot = TRUE)
+```
+
+What is the difference between the two methods (broken-stick and PCAtest)
+- Broken-stick would depend on eigenvalue vectors while PCAtest randomizes the dataset and runs PCA for every randomization.
+
+Broken-stick Barplot
+```{r}
+broken_stick <- function(p){
+  sapply(1:p, function(k){
+    sum(1 / (k:p)) / p
+  })
+}
+
+bs <- broken_stick(ncol(spmo_scaled))
+
+comparison <- data.frame(
+  PC = paste0("PC"),
+  Observed = spmo_pervar,
+  BrokenStick = bs
+)
+
+comparison
+
+plot(
+    spmo_pervar,
+     type = "b",
+     pch = 19,
+    col = "black",
+     ylim = c(0, max(spmo_pervar)),
+     xlab = "Principal Component",
+     ylab = "Proportion of Variance",
+     main = "Broken-Stick Analysis"
+)
+
+lines(bs,
+      type = "b",
+      pch = 17,
+      col = "pink3"
+)
+
+legend("topright",
+       legend = c("Observed", "Broken Stick"),
+       pch = c(19, 17),
+       col = c("black", "pink3")
+)
+```
