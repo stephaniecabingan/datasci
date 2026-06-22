@@ -1,6 +1,9 @@
 # Steph's First GitHub post!
 ## Author: Stephanie Cabingan
 
+Date: 22 June 2026
+Activity 10: https://stephaniecabingan.github.io/datasci/act_10/Cabingan_GIS.html
+
 Date: 21 June 2026
 Activity 9: https://stephaniecabingan.github.io/datasci/act_9/Cabingan_PCA.html
 
