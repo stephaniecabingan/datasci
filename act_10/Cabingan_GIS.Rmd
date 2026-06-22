@@ -1,0 +1,115 @@
+---
+title: "Cabingan_gis"
+author: "Stephanie Cabingan"
+date: "2026-06-22"
+output: html_document
+---
+
+# Reading Packages
+```{r}
+library(terra)
+library(ggplot2)
+library(dplyr)
+library(ggnewscale)
+library(sf)
+```
+
+# Read in csv file with coordinates
+```{r}
+df <- read.csv("bleedingheart.csv")
+```
+
+# Clean data
+```{r}
+good <- complete.cases(df)
+head(df[good, ])
+cleaned <- df[!is.na(df$decimalLongitude) &
+              !is.na(df$decimalLatitude) &
+              !is.na(df$stateProvince) &
+               df$stateProvince !="" &
+               df$stateProvince != " ", ]
+cleaned$stateProvince[cleaned$stateProvince == "Negros Oriental Province"] <- "Negros Oriental"
+cleaned$stateProvince[cleaned$stateProvince == "Ile Cebu"] <- "Cebu"
+cleaned$stateProvince[cleaned$stateProvince == "Negros" & cleaned$county == "Negros Oriental"] <- "Negros Oriental"
+```
+
+# Read in admin boundary
+```{r}
+province <- st_read("PHL_adm1.shp")
+bh_province <- c("Aklan", "Antique", "Capiz", "Cebu", "Negros Occidental", "Negros Oriental")
+bhp_subset <- province[province$NAME_1 %in% bh_province, ]
+st_geometry_type(province)
+```
+
+# Load elevation
+```{r}
+elevation <- rast("ph_strm_geo.tif")
+```
+
+# Check CRS
+```{r}
+print(st_crs(bhp_subset) != st_crs(elevation))
+```
+
+# Transform if needed
+```{r}
+prov_transform <- st_transform(bhp_subset, st_crs(elevation))
+```
+
+# Clip raster
+```{r}
+ras <- crop(elevation, prov_transform) |> mask(bhp_subset)
+```
+
+# Check data info
+```{r}
+crs(ras)
+ext(ras)
+nlyr(ras)
+```
+
+# Elevation Plot
+```{r}
+plot(ras)
+```
+
+# Convert for ggplot
+```{r}
+names(ras) <- "elevation"
+r_df <- as.data.frame(ras, xy = TRUE)
+```
+
+# Plot
+```{r}
+ggplot() +
+  geom_tile(data = r_df, aes(x = x, y = y, fill = elevation)) +
+  scale_fill_gradientn(
+    colors = c("#355070", "#6d597a", "#b56576", "#e56b6f", "#eaac8b"),
+    name = "Elevation (m)") +
+  
+  # Add sampling points 
+new_scale_fill() +
+geom_point(data = cleaned,
+           aes(x = decimalLongitude, y = decimalLatitude, fill = stateProvince),
+           shape = 21,
+           color = "black",
+           size = 3,
+           stroke = 1.2) +
+scale_fill_manual(name = "Location",
+                  values = c("Aklan" = "#f8b5d2",
+                             "Antique" = "#f9f5e3",
+                             "Capiz" = "#f78ecf",
+                             "Cebu" = "#3eabf4",
+                             "Negros Occidental" = "#9d0610",
+                             "Negros Oriental" = "#7a0045")) +
+coord_equal() +
+labs(title = "Occurrence of the Negros Bleeding Heart",
+       x = "Longitude",
+       y = "Latitude") +
+theme_bw()
+```
+
+# Save as PDF
+```{r}
+ggsave("negros_bleeding_heart_map.pdf", plot = last_plot(), width = 8, height = 8)
+```
