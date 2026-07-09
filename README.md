@@ -1,6 +1,10 @@
 # Steph's First GitHub post!
 ## Author: Stephanie Cabingan
 
+Date: 9 July 2026
+Activity 12: https://stephaniecabingan.github.io/datasci/act_12/Cabingan_logical_reg.html
+
+
 Date: 8 July 2026
 Activity 11: https://stephaniecabingan.github.io/datasci/act_11/Cabingan_linear_reg.html
 
