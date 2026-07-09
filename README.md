@@ -2,7 +2,7 @@
 ## Author: Stephanie Cabingan
 
 Date: 9 July 2026
-Activity 12: https://stephaniecabingan.github.io/datasci/act_12/Cabingan_logical_reg.html
+Activity 12: https://stephaniecabingan.github.io/datasci/act_12/Cabingan_logistic_reg.html
 
 
 Date: 8 July 2026
