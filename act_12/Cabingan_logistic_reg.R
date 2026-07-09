@@ -1,0 +1,124 @@
+# Cabingan
+# Actvity 12
+
+#Read packages
+library(ggplot2)
+library(sf)
+
+# Read species data
+df <- read.csv("ph_mouse_deer.csv")
+
+# Cleaning
+good <- complete.cases(df)
+head(df[good, ])
+cleaned <- df[good, ]
+
+# Read in admin boundary
+balabac_ab <- st_read("PHL_adm1.shp")
+
+# Plot
+map <- ggplot(cleaned, aes(x = Longitude, y = Latitude)) +
+  geom_sf(data = balabac_ab,
+          fill = "lightblue",
+          color = "black",
+          linewidth = 0.3,
+          inherit.aes = FALSE) +
+  geom_point(aes(fill = Habitat),
+             shape = 21,
+             color = "black",
+             size = 3,
+             stroke = 1.2) +
+  coord_sf(
+            xlim = c(116.6, 117.5),
+            ylim = c(7.5, 8.5),
+            expand = FALSE) +
+  labs(title = "Observations of the Philippine Mouse Deer in the Balabac Island Group",
+       x = "Longitude",
+       y = "Latitude",
+       fill = "Habitat Type") +
+  
+  theme_bw()
+
+ggsave("Cabingan_logistic_reg_map.pdf", plot = map, width = 6, height = 4, device = "pdf")
+
+# Multiple Logistic Regression
+
+cleaned_hc <- as.factor(cleaned$HabitatCode)
+model <- glm(Detected ~ AverageDistance + Effort + HabitatCode, data = cleaned, family = binomial)
+
+## AVERAGE DISTANCE
+
+# Sequence
+newdata_dist <- data.frame(
+  AverageDistance = seq(min(cleaned$AverageDistance, na.rm=TRUE), max(cleaned$AverageDistance, na.rm=TRUE), length.out = 100),
+  Effort = mean(cleaned$Effort, na.rm = TRUE),   
+  HabitatCode = levels(cleaned$HabitatCode)[2]                                 
+)
+newdata_dist
+
+# Predicted probabilities
+newdata_dist$prob <- predict(model, newdata = newdata_dist, type = "response")
+newdata_dist$prob
+
+# Plot for Average Distance
+avedist_plot <- 
+  ggplot(cleaned, aes(x = AverageDistance, y = Detected)) +
+    geom_point(alpha = 0.5,
+               position = position_jitter(height = 0.02, width = 0)) +
+    
+    geom_line(data = newdata_dist, aes(x = AverageDistance, y = prob),
+              color = "pink2", 
+              linewidth = 1) +
+    
+    labs(title = "Logistic Regression Curve: Average Distance",
+       x = "Average Distance",
+       y = "Probability of Detection") +
+  
+  theme_bw()
+
+# View plot
+print(avedist_plot)
+
+# Export as PDF
+ggsave("Cabingan_logistic_reg_AverageDistance.pdf", plot = adist, width = 6, height = 4, device = "pdf")  
+
+
+## EFFORT
+
+# Sequence
+newdata_eff <- data.frame(
+  Effort = seq(min(cleaned$Effort, na.rm=TRUE), max(cleaned$Effort, na.rm=TRUE), length.out = 100),
+  AverageDistance = mean(cleaned$AverageDistance, na.rm = TRUE),   
+  HabitatCode = levels(cleaned$HabitatCode)[2]                                 
+)
+newdata_eff
+
+# Predicted probabilities
+newdata_eff$prob <- predict(model, newdata = newdata_eff, type = "response")
+newdata_eff$prob
+
+# Plot for Effort
+
+effort_plot <- 
+  ggplot(cleaned, aes(x = Effort, y = Detected)) +
+    geom_point(alpha = 0.5, position = position_jitter(height = 0.02, width = 0.1)) + 
+  
+    geom_line(data = newdata_eff, aes(x = Effort, y = prob), 
+              color = "deeppink", 
+              linewidth = 1) + 
+  
+    labs(title = "Logistic Regression Curve: Effort",
+       x = "Effort",
+       y = "Probability of Detection") +
+  
+  theme_bw()
+
+# View Plot
+print(effort_plot)
+
+# Export as PDF
+ggsave("Cabingan_logistic_reg_Effort.pdf", plot = aeffort, width = 6, height = 4, device = "pdf")
+
+# Summary
+
+summary(model)
