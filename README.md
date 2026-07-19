@@ -1,6 +1,9 @@
 # Steph's First GitHub post!
 ## Author: Stephanie Cabingan
 
+Date: 19 July 2026
+Activity 13: https://stephaniecabingan.github.io/datasci/act_13/Cabingan_randforest_reg.html
+
 Date: 9 July 2026
 Activity 12: https://stephaniecabingan.github.io/datasci/act_12/Cabingan_logistic_reg.html
 
