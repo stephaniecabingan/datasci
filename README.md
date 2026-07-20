@@ -2,7 +2,7 @@
 ## Author: Stephanie Cabingan
 
 Date: 20 July 20226
-Acttivity 14: https://stephaniecabingan.github.io/datasci/act_14/BaduelCabingan_gradientboost--1-.html
+Acttivity 14: https://stephaniecabingan.github.io/datasci/act_14/BaduelCabingan_gradient_boost--1-.html
 
 Date: 19 July 2026
 Activity 13: https://stephaniecabingan.github.io/datasci/act_13/Cabingan_randforest_reg.html
