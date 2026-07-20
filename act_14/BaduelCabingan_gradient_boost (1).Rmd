@@ -1,0 +1,262 @@
+---
+title: "BaduelCabingan_gradient_boost"
+author: "Ingrid Baduel and Stephanie Cabingan"
+date: "2026-07-19"
+output: html_document
+---
+
+# Baduel + Cabingan
+# Activity 14
+
+# What is **gradient boosting (GB)**?
+## - **What**: a powerful machine-learning technique
+## - **For**: regression and classification problems
+## - **How**: builds models sequentially by combining the outputs of several weak learners (decision trees) to form a strong predictive model
+
+***
+
+# How does GB differ from random forest (RF)?:
+
+## **Ensemble Style**:
+### - RF relies on Bagging (Bootstrap Aggregating) in which trees are grown completely independently in parallel
+### - GB relies on Boosting in which trees are grown sequentially in a dependent chain where Tree *m* directly learns from the failures of Tree *m* - 1.
+
+## **Tree Depth and Complexity**:
+### - RF uses fully grown, deep decision trees designed to maximize variance reduction
+### - GB uses shallow trees (often called weak learners or stumps) designed to systematically reduce bias
+
+## **Aggregating Mechanism**:
+### - RF treats all trees equally, obtaining finals outputs via a simple majority vote (classification) or uniform arithmetic average (regression)
+### - GB weighs each tree's contributions using a fractional shrinkage hyperparameter (learning rate)
+
+## **Overfitting Sensitivity**:
+### - RF is highly robust against overfitting; increasing the total number of trees stabilizes the error rate rather than degrading it
+### - GB requires precise tuning; adding excessive trees allows the algorithm to fit the underlying random noise of the dataset
+
+***
+
+# What are the implementation variations by data type?
+
+## **Gradient Boosting Regression**
+### - Data Type: Continuous numeric variables
+### - Loss Optimization: Typically minimizes Mean Squared Error (*L2*) Loss) or Mean Absolute Error (*L1* Loss)
+### - Mechanics: The leaf nodes of each successive tree store the raw average numeric residual value of the partition samples. The final prediction is a direct summation of the base initialization mean and all scaled leaf steps
+
+## **Gradient Boosting Binary Classification**
+### - Data Type: Dichotomous categorical variables containing exactly two classes (e.g., 0 vs 1, Success vs Failure) 
+### - Loss Optimization: Minimizes Log-Loss (Bernoulli Negative Log-Likelihood)
+### - Mechanics: The individual tree leaves store updates in log-odds units. During inference, these cumulative log-odds are mapped back to bounded probability distributions [0, 1] using a logistic sigmoid transformation function
+
+## **Gradient Boosting Multi-Class Classification**
+### - Data Type: Polychotomous categorical variables containing three or more distinct unordered classes
+### - Loss Optimization: Minimizes Multinomial Multi-Class Log-Loss
+### - Mechanics: For an analysis containing *K* unique categorical outcomes, the algorithm builds *K* separate, parallel tree streams during each sequential step. The cumulative raw outputs across all *K* dimensions are evaluated simultaneously and normalized into relative multiclass probabilities using a Softmax transformation function
+
+***
+
+# Which implementation are we exploring?
+
+## **Chosen Implementation: Gradient Boosting Regression**
+### - Reason: continuous outcome, and the residual at every step is just the raw prediction error (no log-odds or softmax conversion needed), which makes the update rule the most direct to code and verify by hand
+
+### - General steps:
+1. **Initialize** the model as a constant: the mean of the target variable, `F0(x) = mean(y)`
+2. **For each boosting round *m*:**
+   - Compute the residuals `residual_i = y_i - F_{m-1}(x_i)` (this *is* the negative gradient under squared-error loss)
+   - Fit a shallow regression tree to the residuals `r`, using the predictors `X`
+   - Update the model: `F_m(x) = F_{m-1}(x) + learning_rate * tree_m(x)`
+3. **Final prediction** after *M* rounds: `F_M(x) = F0(x) + learning_rate * sum(tree_m(x))`
+
+***
+
+# Implementation
+
+## **Dataset**
+### - We're reusing the herpetofauna survey dataset (`herpetozoa-033-095-s001.csv`), 49 sites across Palawan with coordinates, habitat type, elevation, and species richness
+### - Predicting: **species richness (`SPPTotal`)**, a continuous count, from **elevation (`Elev`), latitude (`Lat`), and longitude (`Long`)**
+### - The last few rows of the file are footnotes (asterisk/hashtag legend), not data, so those get dropped before modeling
+
+```{r data}
+herps <- read.csv("herpetozoa-033-095-s001.csv", stringsAsFactors = FALSE)
+
+# drop footnote rows at the bottom of the file (no valid SPPTotal)
+herps$SPPTotal <- suppressWarnings(as.numeric(herps$SPPTotal))
+herps <- herps[!is.na(herps$SPPTotal), ]
+
+X <- herps[, c("Elev", "Lat", "Long")]
+y <- herps$SPPTotal
+
+str(X)
+summary(y)
+```
+
+## **Step 1: The weak learner (a manual regression tree)**
+### - No `rpart`/`tree` package used. At every node, every feature and every candidate split point is checked, and the split that reduces total sum of squared errors (SSE) the most is kept
+### - Splitting stops once a max depth is hit or a node runs out of enough observations to split further
+
+```{r tree-functions}
+# SSE of a set of values around their own mean
+node_sse <- function(values) {
+  if (length(values) == 0) return(0)
+  sum((values - mean(values))^2)
+}
+
+# scans every feature/threshold combo, returns the split with the biggest
+# SSE reduction. returns NULL if nothing improves on the parent node
+best_split <- function(X, r, min_leaf = 3) {
+  best <- list(feature = NA, threshold = NA, gain = 0)
+  parent_sse <- node_sse(r)
+
+  for (feat in colnames(X)) {
+    values <- X[[feat]]
+    candidates <- unique(sort(values))
+    thresholds <- (candidates[-1] + candidates[-length(candidates)]) / 2
+
+    for (thresh in thresholds) {
+      left_idx <- values <= thresh
+      right_idx <- !left_idx
+
+      if (sum(left_idx) < min_leaf || sum(right_idx) < min_leaf) next
+
+      split_sse <- node_sse(r[left_idx]) + node_sse(r[right_idx])
+      gain <- parent_sse - split_sse
+
+      if (gain > best$gain) {
+        best <- list(feature = feat, threshold = thresh, gain = gain)
+      }
+    }
+  }
+
+  if (is.na(best$feature)) return(NULL)
+  best
+}
+
+# recursively builds a regression tree as a nested list. a node is either a
+# leaf (has $value) or a split (has $feature/$threshold/$left/$right)
+build_tree <- function(X, r, max_depth = 2, min_leaf = 3, depth = 0) {
+  if (depth >= max_depth || nrow(X) < (2 * min_leaf)) {
+    return(list(value = mean(r)))
+  }
+
+  split <- best_split(X, r, min_leaf = min_leaf)
+  if (is.null(split)) {
+    return(list(value = mean(r)))
+  }
+
+  left_idx <- X[[split$feature]] <= split$threshold
+  right_idx <- !left_idx
+
+  left_node <- build_tree(X[left_idx, , drop = FALSE], r[left_idx],
+                           max_depth, min_leaf, depth + 1)
+  right_node <- build_tree(X[right_idx, , drop = FALSE], r[right_idx],
+                            max_depth, min_leaf, depth + 1)
+
+  list(feature = split$feature, threshold = split$threshold,
+       left = left_node, right = right_node)
+}
+
+# pushes one row of X down the tree until it reaches a leaf
+predict_one <- function(tree, row) {
+  while (is.null(tree$value)) {
+    if (row[[tree$feature]] <= tree$threshold) {
+      tree <- tree$left
+    } else {
+      tree <- tree$right
+    }
+  }
+  tree$value
+}
+
+# predicts for a whole data frame
+predict_tree <- function(tree, X) {
+  sapply(seq_len(nrow(X)), function(i) predict_one(tree, X[i, , drop = FALSE]))
+}
+```
+
+## **Step 2: The boosting loop**
+### - Start from the mean, repeatedly fit a tree to the current residuals, and nudge predictions toward those residuals with a small learning rate
+
+```{r boosting-functions}
+gradient_boost <- function(X, y, n_trees = 100, learning_rate = 0.1,
+                            max_depth = 2, min_leaf = 3) {
+
+  init_pred <- mean(y)
+  F_current <- rep(init_pred, length(y))
+  trees <- vector("list", n_trees)
+  train_mse <- numeric(n_trees)
+
+  for (m in seq_len(n_trees)) {
+    residuals <- y - F_current
+    tree_m <- build_tree(X, residuals, max_depth = max_depth,
+                          min_leaf = min_leaf)
+    tree_pred <- predict_tree(tree_m, X)
+
+    F_current <- F_current + learning_rate * tree_pred
+    trees[[m]] <- tree_m
+    train_mse[m] <- mean((y - F_current)^2)
+  }
+
+  list(trees = trees, init_pred = init_pred,
+       learning_rate = learning_rate, train_mse = train_mse)
+}
+
+predict_gb <- function(model, X_new) {
+  F_pred <- rep(model$init_pred, nrow(X_new))
+  for (tree_m in model$trees) {
+    F_pred <- F_pred + model$learning_rate * predict_tree(tree_m, X_new)
+  }
+  F_pred
+}
+```
+
+## **Step 3: Fitting the model**
+### - 100 trees, learning rate of 0.1, max depth of 2 -- conservative settings given the small sample size (49 sites)
+
+```{r fit-model}
+gb_model <- gradient_boost(X, y, n_trees = 100, learning_rate = 0.1,
+                            max_depth = 2, min_leaf = 3)
+
+c(first_iteration = gb_model$train_mse[1],
+  last_iteration = gb_model$train_mse[length(gb_model$train_mse)])
+```
+
+```{r convergence-plot, fig.width=6, fig.height=4}
+plot(gb_model$train_mse, type = "l", lwd = 2, col = "steelblue",
+     xlab = "Boosting Iteration", ylab = "Training MSE",
+     main = "Training MSE vs. Number of Trees")
+```
+
+### - Training error drops quickly in the first several rounds and then decreases more slowly, which is the expected boosting pattern
+
+## **Step 4: Checking the fit**
+
+```{r predictions}
+fitted_values <- predict_gb(gb_model, X)
+
+results <- data.frame(
+  site = herps$Sites,
+  actual_richness = y,
+  predicted_richness = round(fitted_values, 2)
+)
+head(results, 10)
+
+final_mse <- mean((y - fitted_values)^2)
+final_rmse <- sqrt(final_mse)
+c(MSE = final_mse, RMSE = final_rmse)
+```
+
+```{r fit-plot, fig.width=5, fig.height=5}
+plot(y, fitted_values, xlab = "Actual species richness",
+     ylab = "Predicted species richness",
+     main = "Manual Gradient Boosting: Actual vs. Predicted",
+     pch = 19, col = "darkorange")
+abline(a = 0, b = 1, lty = 2, col = "gray40")
+```
+
+### - Predictions track actual richness fairly closely on the training data, though with no held-out test set this only confirms the boosting mechanics work (residuals shrinking as trees accumulate), not that the model generalizes -- a train/test split would be a reasonable next step given how small this dataset is
+
+***
+
+# Takeaways
+## - Under squared-error loss, the "gradient" is just the residual, so boosting reduces to a loop of fitting the leftover error and taking a small step toward correcting it
+## - Number of trees, learning rate, and tree depth are the main levers -- pushing any of them too far (too many trees, too high a learning rate, too-deep trees) is what pushes GB from underfitting toward overfitting, unlike RF where adding trees rarely hurts
